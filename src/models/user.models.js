@@ -26,7 +26,7 @@ fullname:{
 avatar: {
     type: String, //cloudinary url
 },
-coverImange:{
+coverImage:{
    type: String,
    required: true, 
 },
@@ -50,7 +50,7 @@ refreshToken: {
 
 userSchema.pre("Save", async function (next) {
     if(this.isModified("password")) { 
-     this.password = bcrypt.hash(this.password, 12)
+     this.password = await bcrypt.hash(this.password, 12)
      next()
     }
      return next()
@@ -86,4 +86,4 @@ userSchema.methods.refreshAccessToken =  async function (){
     }
 )
 }
-export default User = mongoose.model("User", userSchema)
+export const User = mongoose.model("User", userSchema)
