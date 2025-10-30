@@ -3,9 +3,7 @@ import { ApiError } from "../utils/apiErrorHandler.js";
 import  {User} from "../models/user.models.js";
 import { uploadFile } from "../utils/fileUpload.js";
 import { ApiResponse } from "../utils/apiResponse.js";
-import jwt from "jsonwebtoken"
-import mongoose from "mongoose";
-
+import jwt from "jsonwebtoken";
 const resisterUser = asyncHandler(async (req, res) => {
     //get data from frontend 
     const {username, fullname, email, password} = req.body
@@ -13,38 +11,50 @@ const resisterUser = asyncHandler(async (req, res) => {
 
 
     //Validation
-    if([fullname, username, email, password].some((field) => field?.trim === "")){
+    if([fullname, username, email, password].some((field) => field?.trim() === "")){
         throw new ApiError( 400, "All fields are reguired")
     }
 
 
     //Check is user alredy exists
-     const existedUser = User.findOne({ $or : [{username}, {email}]})
+     const existedUser = await User.findOne({ $or : [{username}, {email}]})
      if(existedUser){
-        ApiError(409, "User with email or username alredy exists")
+        throw new ApiError(409, "User with email or username alredy exists")
      }
-
+      console.log(req.files)
      //fileuploads
-     const avatarLocalPath = req.files?.avatar[0]?.path
-     const coverImageLocalPath = req.files?.coverImage[0].path
-     if(!coverImageLocalPath){
-        throw new ApiError(400, "Cover image is reguired")
-     }
-   const avatar = await  uploadFile(coverImageLocalPath)
-   const coverImage = await uploadFile(avatarLocalPath)
+     const avatarLocalPath = req.files?.avatar?.[0]?.path;
+    const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
+    console.log(avatarLocalPath)
 
-   if(!coverImage){
-   throw new ApiError(400, "Cover image is reguired")
-   }
- 
-   const user = await User.create({
-    fullname,
-    avatar: avatar?.url || "",
-    coverImage: coverImage.url,
-    username : username.toLowerCase(),
-    email,
-    password
- })
+    // let coverImageLocalPath;
+    // if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
+    //     coverImageLocalPath = req.files.coverImage[0].path
+    // }
+    
+
+    if (!avatarLocalPath) {
+        throw new ApiError(400, "avatar file is required")
+    }
+
+    const avatar = await uploadFile(avatarLocalPath)
+    const coverImage = await uploadFile(coverImageLocalPath)
+    console.log(avatar.url)
+    //console.log(coverImage.url)
+
+    if (!avatar) {
+        throw new ApiError(400, "Avatar file is required")
+    }
+   
+    const user = await User.create({
+        fullname,
+        avatar: avatar.url,
+        coverImage: coverImage?.url || "",
+        email, 
+        password,
+        username: username.toLowerCase()
+    })
+
 
 const createdUser = await User.findById(user._id).select(
     "-password -refreshToken" //these field not be selected
@@ -57,7 +67,6 @@ if(!createdUser){
 return res.status(201).json(
     new ApiResponse(200, createdUser, "User registered Successfully")
 )
-
 }) 
 
 const generateAccessTokenAndRefreshToken  =  async(userId) => {
@@ -81,7 +90,7 @@ const generateAccessTokenAndRefreshToken  =  async(userId) => {
 const loginUser = asyncHandler(async (req, res) => {
   // take password, email or user name from req.body
   const {username, email, password} = req.body
-  if(!username && !email){
+  if(!(username || email)){
     throw new ApiError( 400, "Username or Email Required")
   }
 
@@ -151,8 +160,46 @@ const logoutUser = asyncHandler(async(req, res) => {
     .clearCookie("refreshToken", options)
     .json(new ApiResponse(200, {}, "User logged Out"))
 })
+
+const refreshAccessToken = asyncHandler(async(req, res) => {
+    const incomingrefreshToken = req.cookies.refreshToken || req.body.refreshToken
+    if(!incomingrefreshToken){
+        throw new ApiError( 401, "Unauthorized request")
+    }
+   try {
+    const decodedToken = jwt.verify(incomingrefreshToken, process.env.REFRESH_TOKEN_SECRET)
+    const user = await User.findById(decodedToken?._id)
+    if(!user){
+     throw new ApiError(401, "Invalid refresh Token")
+    }
+    if(incomingrefreshToken !== user?.refreshToken){
+     throw new ApiError(401, "Refresh Token is expired or used")
+    }
+ const options = {
+     httpOnly: true,
+     secure: true,
+ }
+ const {accessToken, newrefreshToken} = await generateAccessTokenAndRefreshToken(user._id)
+ return res
+ .status(200)
+ .cookie("accessToken", accessToken)
+ .cookie("refreshToken", newrefreshToken)
+ .json(
+     new ApiResponse(
+         200,
+         {accessToken,
+        refreshToken: newrefreshToken,},
+        "Access Token Refreshed Successfully"
+ 
+     )
+ )
+   } catch (error) {
+    throw new ApiError(401, error.message|| "Invalid refresh Token")
+   }
+})
 export {
     resisterUser,
     loginUser,
-    logoutUser
+    logoutUser,
+    refreshAccessToken
 }

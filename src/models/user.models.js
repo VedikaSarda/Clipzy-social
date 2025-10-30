@@ -24,11 +24,12 @@ fullname:{
     trim: true 
 },
 avatar: {
-    type: String, //cloudinary url
+    type: String,
+    required: true,  //cloudinary url
 },
 coverImage:{
    type: String,
-   required: true, 
+  
 },
 watchhistory:[
     { 
@@ -78,7 +79,7 @@ userSchema.methods.refreshAccessToken =  async function (){
     jwt.sign(
     {
         _id: this.id,
-        email: this.email, 
+        
     },
     process.env.REFRESH_TOKEN_SECRET,
     {
